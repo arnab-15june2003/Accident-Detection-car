@@ -135,14 +135,12 @@ Install the following libraries via **Sketch > Include Library > Manage Librarie
 
 ```text
 ├── Car/
-│   ├── car.cpp
 │   └── car_accident_final.ino     # ESP32 C++ firmware
 ├── WEB-APP/
 │   ├── Accident Detection Car.html
 │   ├── CAR.conf                   # Mosquitto broker dual-listener configuration
 │   ├── CAR.html                   # Responsive telemetry & control dashboard
 │   ├── Start_Demo.bat             # 1-click startup automation for broker & HTTP server
-│   └── main.cpp
 └── README.md
 
 ```
