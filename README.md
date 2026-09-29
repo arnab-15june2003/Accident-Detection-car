@@ -72,13 +72,13 @@ An IoT-powered autonomous safety and accident detection robotic vehicle built on
 
 ### Required Components
 
-* **ESP32 DevKit V1** (30-pin or 36-pin)
+* **ESP32 DevKit V1** (30-pin)
 * **MPU6050** Accelerometer & Gyroscope module
 * **2x HC-SR04** Ultrasonic Distance Sensors
 * **L298N Dual H-Bridge Motor Driver**
-* **4WD or 2WD Robot Chassis** with DC Gear Motors
+* **4WD Robot Chassis** with DC Gear Motors
 * **Active Buzzer**
-* **External Power Supply** (e.g., 2S / 3S Li-ion battery pack with common ground to ESP32)
+* **External Power Supply**
 
 ### Pin Configuration Table
 
