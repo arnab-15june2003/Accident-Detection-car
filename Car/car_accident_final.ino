@@ -12,18 +12,18 @@ Adafruit_MPU6050 mpu;
 Preferences preferences; 
 
 // --- NETWORK & TIME ---
-const char* ssid = "Network not found !";
-const char* password = "a3777888";
-const char* mqtt_server = "192.168.0.202"; 
+const char* ssid = ""; // WIFI Name
+const char* password = ""; // WIFI PAssword
+const char* mqtt_server = ""; //PC IPv4 address (Run on CMD - ipconfig)
 
 // --- TWILIO API CREDENTIALS ---
-const String TWILIO_SID     = "ACaa1c63a648efdcee51881bfea3309fad";
-const String TWILIO_TOKEN   = "2854c5a233ef30b69c86f8ecee1e78f4";
-const String TWILIO_NUM     = "+14433000095"; 
+const String TWILIO_SID     = "";
+const String TWILIO_TOKEN   = "";
+const String TWILIO_NUM     = ""; 
 
 // --- VERIFIED EMERGENCY CONTACTS ---
-const String CONTACT_1 = "+918910332181"; 
-const String CONTACT_2 = "+917719142762";        
+const String CONTACT_1 = "BLANK"; 
+const String CONTACT_2 = "BLANK";        
 const String CONTACT_3 = "BLANK";        
 
 const char* ntpServer = "pool.ntp.org";
@@ -61,13 +61,14 @@ float crashGForceB = 20.0;
 bool guardianEnabled = true; 
 bool sentinelMode = false; 
 
-// --- DASHBOARD CALL ARMING & 10-SECOND SAFETY TIMER ---
+// --- DASHBOARD CALL ARMING, GPS & TIMER ---
 bool autoCallEnabled = false;       
 bool crashAlarmActive = false;
 bool emergencyPending = false;      
 bool emergencyDispatched = false;   
 unsigned long crashStartTime = 0;
 const unsigned long GRACE_PERIOD_MS = 10000; 
+String lastKnownLocation = "Location Unknown"; // GPS Storage
 
 float previousErrorF = 0.0; 
 float previousErrorB = 0.0;
@@ -153,7 +154,19 @@ void makeTwilioSMS(String targetNumber) {
   
   String encTo = targetNumber; encTo.replace("+", "%2B");
   String encFrom = TWILIO_NUM; encFrom.replace("+", "%2B");
-  String payload = "To=" + encTo + "&From=" + encFrom + "&Body=🚨 CRITICAL ALERT: Your Car has been crash confirmed. Emergency assistance requested.";
+  
+  // URL Encoded payload with Google Maps link injection
+  String bodyText = "🚨 CRITICAL ALERT: Your Car has been crash confirmed. Emergency assistance requested.%0A%0ATrack live location here:%0A" + lastKnownLocation;
+  
+  // URL Encoding Fixes (Spaces must be %20)
+  bodyText.replace(" ", "%20"); 
+  bodyText.replace(":", "%3A"); 
+  bodyText.replace("/", "%2F"); 
+  bodyText.replace("?", "%3F"); 
+  bodyText.replace("=", "%3D"); 
+  bodyText.replace(",", "%2C"); 
+  
+  String payload = "To=" + encTo + "&From=" + encFrom + "&Body=" + bodyText;
 
   int httpResponseCode = http.POST(payload);
   if (httpResponseCode == 201) {
@@ -174,7 +187,7 @@ void makeTwilioCall(String targetNumber) {
   
   String encTo = targetNumber; encTo.replace("+", "%2B");
   String encFrom = TWILIO_NUM; encFrom.replace("+", "%2B");
-  String twiml = "%3CResponse%3E%3CSay%20voice%3D%22alice%22%3ECRITICAL%20ALERT.%20A%20crash%20involving%20your%20car%20has%20been%20confirmed.%20Emergency%20assistance%20requested.%3C%2FSay%3E%3C%2FResponse%3E";
+  String twiml = "%3CResponse%3E%3CSay%20voice%3D%22alice%22%3ECRITICAL%20ALERT.%20A%20crash%20involving%20your%20car%20has%20been%20confirmed.%20A%20live%20GPS%20map%20link%20has%20been%20sent%20to%20your%20phone%20via%20text%20message.%20Emergency%20assistance%20requested.%3C%2FSay%3E%3C%2FResponse%3E";
   String payload = "To=" + encTo + "&From=" + encFrom + "&Twiml=" + twiml;
 
   int httpResponseCode = http.POST(payload);
@@ -189,7 +202,7 @@ void makeTwilioCall(String targetNumber) {
 void dispatchAllEmergencyAlerts() {
   debugLog("SYS: Grace period expired! Dispatching Twilio Alerts...");
 
-  // Send texts with a 500ms breather and an MQTT heartbeat in between to prevent disconnects
+  // Send texts with a breather and an MQTT heartbeat to prevent disconnects
   makeTwilioSMS(CONTACT_1);
   client.loop(); yield(); delay(500); 
   
@@ -199,7 +212,7 @@ void dispatchAllEmergencyAlerts() {
   makeTwilioSMS(CONTACT_3);
   client.loop(); yield(); delay(500);
 
-  // Send Voice Calls with a 2-second gap to bypass Twilio's 1-call-per-second limit
+  // Send Voice Calls with a 2-second gap to bypass Twilio's limits
   makeTwilioCall(CONTACT_1);
   client.loop(); yield(); delay(2000); 
   
@@ -238,6 +251,17 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       currentCommand = 'S'; 
       resetAlarm(); 
     } 
+    else if (message == "C") {
+      distanceFront = 100.0;
+      previousDistanceFront = 100.0;
+      distanceBack = 100.0;
+      previousDistanceBack = 100.0;
+      pinMode(trigPin, OUTPUT); 
+      pinMode(echoFront, INPUT); 
+      pinMode(echoBack, INPUT);
+      digitalWrite(trigPin, LOW);
+      debugLog("SYS: Radar sensors software reboot triggered.");
+    }
     else { 
       char newCmd = message.charAt(0);
       if (crashAlarmActive) {
@@ -252,6 +276,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       if (!crashAlarmActive) currentCommand = newCmd;
     }
   } 
+  else if (String(topic) == "torquebeast/location") {
+    lastKnownLocation = message; 
+  }
   else if (String(topic) == "torquebeast/tune") {
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, message);
@@ -287,16 +314,33 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
+// --- ROBUST WIFI & MQTT RECONNECT LOGIC ---
 void reconnect() {
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.println("SYS: Wi-Fi dropped! Reconnecting...");
+    WiFi.disconnect();
+    WiFi.begin(ssid, password);
+    unsigned long startAttempt = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 8000) {
+      delay(500);
+      Serial.print(".");
+    }
+  }
+
   while (!client.connected()) {
+    if (WiFi.status() != WL_CONNECTED) return; // Break out if Wi-Fi dropped again
+    Serial.println("Attempting MQTT connection...");
     if (client.connect("TorqueBeastESP32")) {
       client.subscribe("torquebeast/command");
       client.subscribe("torquebeast/tune");
+      client.subscribe("torquebeast/location"); 
       client.subscribe("torquebeast/req_config"); 
       publishCurrentConfig(); 
       debugLog("SYS: MQTT Reconnected!");
       beep(2, 100);
-    } else { delay(2000); }
+    } else { 
+      delay(2000); 
+    }
   }
 }
 
@@ -342,6 +386,7 @@ void setup() {
   if (client.connect("TorqueBeastESP32")) {
     client.subscribe("torquebeast/command");
     client.subscribe("torquebeast/tune");
+    client.subscribe("torquebeast/location"); 
     client.subscribe("torquebeast/req_config"); 
     publishCurrentConfig();
   }
@@ -358,7 +403,11 @@ void setup() {
 }
 
 void loop() {
-  if (!client.connected()) { drive(0, 0); currentCommand = 'S'; reconnect(); }
+  if (!client.connected() || WiFi.status() != WL_CONNECTED) { 
+    drive(0, 0); 
+    currentCommand = 'S'; 
+    reconnect(); 
+  }
   client.loop(); 
 
   // --- 10-SECOND SAFETY GRACE PERIOD RUNTIME ---
@@ -395,9 +444,6 @@ void loop() {
     if (!emergencyPending && !sentinelMode) {
       digitalWrite(buzzerPin, HIGH);
     }
-    
-    // Auto-reversal logic has been completely removed.
-    // The motors will now strictly lock at 0 until you reset the alarm.
     drive(0, 0); 
   }
 
@@ -412,14 +458,14 @@ void loop() {
     if (pingFrontNext) {
       digitalWrite(trigPin, LOW); delayMicroseconds(2); digitalWrite(trigPin, HIGH); delayMicroseconds(10); digitalWrite(trigPin, LOW);
       duration = pulseIn(echoFront, HIGH, 20000); 
-      distanceFront = (duration == 0) ? ((previousDistanceFront <= 30.0) ? 2.0 : 100.0) : (duration * SOUND_SPEED / 2);
+      distanceFront = (duration == 0) ? 100.0 : (duration * SOUND_SPEED / 2);
       if (distanceFront > 100.0) distanceFront = 100.0; 
       distanceDrop = (previousDistanceFront < 100.0 && distanceFront < 100.0) ? (previousDistanceFront - distanceFront) : 0.0;
       previousDistanceFront = distanceFront;
     } else {
       digitalWrite(trigPin, LOW); delayMicroseconds(2); digitalWrite(trigPin, HIGH); delayMicroseconds(10); digitalWrite(trigPin, LOW);
       duration = pulseIn(echoBack, HIGH, 20000); 
-      distanceBack = (duration == 0) ? ((previousDistanceBack <= 30.0) ? 2.0 : 100.0) : (duration * SOUND_SPEED / 2);
+      distanceBack = (duration == 0) ? 100.0 : (duration * SOUND_SPEED / 2);
       if (distanceBack > 100.0) distanceBack = 100.0; 
       distanceDropB = (previousDistanceBack < 100.0 && distanceBack < 100.0) ? (previousDistanceBack - distanceBack) : 0.0;
       previousDistanceBack = distanceBack;
