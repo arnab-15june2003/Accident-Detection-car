@@ -1,4 +1,3 @@
-```markdown
 # 🚗 Accident Detection & Emergency Dispatch Robotic Car
 
 An IoT-powered autonomous safety and accident detection robotic vehicle built on the **ESP32** microcontroller. The system combines real-time sensor fusion (MPU6050 IMU + dual ultrasonic obstacle radars) with an onboard **Black Box** incident recorder, automated **Twilio emergency dispatch** (SMS with Google Maps location and automated voice calls), and a modular, responsive **HTML5/WebSocket telemetry dashboard**.
@@ -121,7 +120,7 @@ Install the following libraries via **Sketch > Include Library > Manage Librarie
 
 ### 2. PC / Host Machine Requirements
 
-* **Python 3.x** (Used for serving `CAR.html` via standard `http.server`)
+* **Python 3.x** (Used for serving the web app via standard `http.server`)
 * **Eclipse Mosquitto MQTT Broker**: [Download Mosquitto](https://mosquitto.org/download/)
 
 ### 3. Frontend Web Dependencies (Loaded via CDN in `CAR.html`)
@@ -135,13 +134,15 @@ Install the following libraries via **Sketch > Include Library > Manage Librarie
 ## 📁 Repository Structure
 
 ```text
-├── firmware/
-│   └── TorqueBeast_Twilio.ino     # ESP32 C++ firmware
-├── web/
-│   └── CAR.html                   # Responsive telemetry & control dashboard
-├── server/
+├── Car/
+│   ├── car.cpp
+│   └── car_accident_final.ino     # ESP32 C++ firmware
+├── WEB-APP/
+│   ├── Accident Detection Car.html
 │   ├── CAR.conf                   # Mosquitto broker dual-listener configuration
-│   └── Launch_Server.bat          # 1-click startup automation for broker & HTTP server
+│   ├── CAR.html                   # Responsive telemetry & control dashboard
+│   ├── Start_Demo.bat             # 1-click startup automation for broker & HTTP server
+│   └── main.cpp
 └── README.md
 
 ```
@@ -152,7 +153,7 @@ Install the following libraries via **Sketch > Include Library > Manage Librarie
 
 ### 1. Mosquitto Broker Configuration
 
-Create a configuration file named `CAR.conf` in your Mosquitto or project folder:
+Ensure your `CAR.conf` file (located in the `WEB-APP/` folder) contains the following configuration for dual-listener support:
 
 ```text
 # Standard MQTT TCP port for ESP32
@@ -167,7 +168,7 @@ protocol websockets
 
 ### 2. ESP32 Firmware Configuration
 
-Open `TorqueBeast_Twilio.ino` in Arduino IDE. Update the network and broker definitions to match your local setup:
+Open `car_accident_final.ino` (located in the `Car/` folder) in Arduino IDE. Update the network and broker definitions to match your local setup:
 
 ```cpp
 // --- NETWORK & BROKER ---
@@ -183,34 +184,18 @@ Select your ESP32 board, choose the correct COM port, and upload the sketch.
 
 #### Option A: 1-Click Launch (Windows Batch File)
 
-Run `Launch_Server.bat`:
-
-```bat
-@echo off
-title IoT Accident Detection Server Runner
-echo Starting Mosquitto MQTT Broker...
-start "Mosquitto Broker" "C:\Program Files\mosquitto\mosquitto.exe" -c CAR.conf -v
-
-echo Starting Python Local Web Server...
-cd /d "%~dp0"
-start "Python Web Server" cmd /k "python -m http.server 8000"
-
-echo Servers running!
-echo Access Dashboard at: http://localhost:8000/CAR.html
-pause
-
-```
+Navigate to the `WEB-APP/` folder and double-click `Start_Demo.bat`. This script automatically boots both the Mosquitto broker (using `CAR.conf`) and the Python local web server.
 
 #### Option B: Manual Startup (Command Line / Linux / macOS)
 
-1. **Start Mosquitto Broker**:
+1. **Start Mosquitto Broker** (from inside the `WEB-APP/` folder):
 ```bash
 mosquitto -c CAR.conf -v
 
 ```
 
 
-2. **Start Web Server** (in the directory where `CAR.html` is saved):
+2. **Start Web Server** (from inside the `WEB-APP/` folder):
 ```bash
 python -m http.server 8000
 
