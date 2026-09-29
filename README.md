@@ -274,14 +274,6 @@ When an impact is detected:
 * **Voice Call**: Calls the emergency contact and plays a high-priority spoken alert using TwiML speech synthesis.
 
 
-
-### Twilio Account Prerequisites
-
-* **Account SID & Auth Token**: Obtain from the [Twilio Console](https://console.twilio.com/).
-* **Active Twilio Phone Number**: Must have SMS and Voice capabilities enabled.
-* **Verified Caller IDs**: For free trial accounts, all recipient phone numbers (`CONTACT_1`, etc.) must be verified under **Phone Numbers > Manage > Verified Caller IDs**.
-* **Geo-Permissions**: Verify outbound SMS and Voice permissions are enabled for your recipient country (e.g., India `+91`) under **Messaging/Voice > Settings > Geo permissions**.
-
 ---
 
 ## 🛠 Troubleshooting
